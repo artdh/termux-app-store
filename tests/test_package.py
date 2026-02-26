@@ -1,13 +1,23 @@
-"""
-Tests untuk package loading, fingerprint detection, dan root validation.
-"""
-
 import pytest
 from pathlib import Path
-from tests.conftest import make_build_sh, make_valid_root
 
 
-# ── Fungsi yang ditest (copy dari termux_app_store_cli.py) ───────────────────
+def make_build_sh(root: Path, pkg_name: str, fields: dict) -> Path:
+    pkg_dir = root / "packages" / pkg_name
+    pkg_dir.mkdir(parents=True, exist_ok=True)
+    lines = []
+    for key, val in fields.items():
+        lines.append(f'{key}="{val}"')
+    (pkg_dir / "build.sh").write_text("\n".join(lines) + "\n")
+    return pkg_dir
+
+
+def make_valid_root(root: Path, with_fingerprint: bool = True) -> Path:
+    (root / "packages").mkdir(parents=True, exist_ok=True)
+    fingerprint = "# Termux App Store Official" if with_fingerprint else "# other script"
+    (root / "build-package.sh").write_text(fingerprint + "\nset -euo pipefail\n")
+    return root
+
 
 FINGERPRINT_STRING = "Termux App Store Official"
 
@@ -74,8 +84,6 @@ def load_all_packages(packages_dir: Path) -> list:
     return pkgs
 
 
-# ── Tests: has_store_fingerprint ─────────────────────────────────────────────
-
 class TestHasStoreFingerprint:
 
     def test_valid_fingerprint(self, tmp_path):
@@ -108,8 +116,6 @@ class TestHasStoreFingerprint:
         assert has_store_fingerprint(tmp_path) is False
 
 
-# ── Tests: is_valid_root ──────────────────────────────────────────────────────
-
 class TestIsValidRoot:
 
     def test_fully_valid(self, tmp_path):
@@ -137,8 +143,6 @@ class TestIsValidRoot:
         f.write_text("hello")
         assert is_valid_root(f) is False
 
-
-# ── Tests: load_package ───────────────────────────────────────────────────────
 
 class TestLoadPackage:
 
@@ -218,8 +222,6 @@ class TestLoadPackage:
         assert p["version"] == "5.2.6"
         assert p["deps"]    == "python"
 
-
-# ── Tests: load_all_packages ──────────────────────────────────────────────────
 
 class TestLoadAllPackages:
 
