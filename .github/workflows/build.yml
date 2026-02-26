@@ -1,5 +1,4 @@
 name: CI
-
 on:
   push:
     branches: [ master ]
@@ -21,12 +20,12 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.14'
+          python-version: '3.12'
 
       - name: Install dependencies
         run: |
@@ -36,14 +35,15 @@ jobs:
         run: |
           pytest tests/ \
             --cov=. \
-            --cov-report=xml \
+            --cov-report=xml:coverage.xml \
             --cov-report=term-missing \
             -v
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
           fail_ci_if_error: false
           verbose: true
+          slug: djunekz/termux-app-store
