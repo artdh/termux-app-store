@@ -1,15 +1,9 @@
-"""
-Tests untuk CLI status logic, command aliases, dan cache handling.
-"""
-
 import re
 import json
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-
-# ── Fungsi yang ditest ────────────────────────────────────────────────────────
 
 def _ver_tuple(v: str):
     v = v.strip()
@@ -61,8 +55,6 @@ CMD_ALIASES = {
 }
 
 
-# ── Tests: get_status logic ───────────────────────────────────────────────────
-
 class TestGetStatusLogic:
 
     def test_not_installed(self):
@@ -99,7 +91,6 @@ class TestGetStatusLogic:
     def test_update_with_revision(self):
         assert get_status_pure("4.10-1", "4.10-2") == "UPDATE"
 
-    # Real package scenarios
     def test_bower_installed(self):
         assert get_status_pure("1.8.12", "1.8.12") == "INSTALLED"
 
@@ -130,8 +121,6 @@ class TestGetStatusLogic:
     def test_uv_needs_update(self):
         assert get_status_pure("0.10.3", "0.10.4") == "UPDATE"
 
-
-# ── Tests: CMD_ALIASES ────────────────────────────────────────────────────────
 
 class TestCmdAliases:
 
@@ -195,8 +184,6 @@ class TestCmdAliases:
     def test_total_alias_count(self):
         assert len(CMD_ALIASES) == 15
 
-
-# ── Tests: cache JSON handling ────────────────────────────────────────────────
 
 class TestCacheHandling:
 
