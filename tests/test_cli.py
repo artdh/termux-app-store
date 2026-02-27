@@ -122,6 +122,24 @@ class TestGetStatusLogic:
         assert get_status_pure("0.10.3", "0.10.4") == "UPDATE"
 
 
+class TestVerTuple:
+
+    def test_non_numeric_base_segment(self):
+        # Triggers except ValueError: base_parts.append(0) — baris 17-18
+        result = _ver_tuple("1.alpha.3")
+        assert result == (1, 0, 3, 0)
+
+    def test_non_numeric_revision(self):
+        # Triggers except ValueError: rev = 0 — baris 21-22
+        result = _ver_tuple("1.2.3-beta")
+        assert result == (1, 2, 3, 0)
+
+    def test_non_numeric_both(self):
+        # Triggers both except branches
+        result = _ver_tuple("1.abc.3-rc1")
+        assert result == (1, 0, 3, 0)
+
+
 class TestCmdAliases:
 
     def test_list_primary(self):
