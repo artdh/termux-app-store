@@ -364,7 +364,8 @@ class TestPackageManagerRemote:
         pm.cache_ttl = 9999
 
         pkgs = pm._load_remote()
-        assert pkgs[0]["name"] == "pnpm"
+        assert pkgs[0]["package"] == "pnpm"
+        assert pkgs[0]["version"] == "10.30.1"
 
     def test_load_remote_fallback_to_cache_on_failure(self, tmp_path):
         payload = {"packages": [{"package": "git", "version": "2.0"}]}
@@ -523,13 +524,16 @@ class TestAppUpdateChecker:
         assert "0.2.0" in url
         assert "aarch64" in url
 
+
     def test_upgrade_app_success(self, tmp_path):
-        with patch("package_manager.download_file", return_value=True), \
+        temp_file = tmp_path / "termux-app-store-new"
+        with patch("package_manager.download_file", side_effect=lambda url, dest, **kw: [dest.parent.mkdir(parents=True, exist_ok=True), dest.write_bytes(b"binary"), True][-1]), \
              patch("package_manager.get_architecture", return_value="aarch64"), \
-             patch("shutil.move") as mock_move, \
+             patch("shutil.move"), \
              patch("package_manager.PREFIX", str(tmp_path)):
             (tmp_path / "bin").mkdir(parents=True, exist_ok=True)
-            result = AppUpdateChecker.upgrade_app("0.2.0")
+            with patch("package_manager.Path", side_effect=lambda p: tmp_path / "termux-app-store-new" if str(p) == "/tmp/termux-app-store-new" else Path(p)):
+                result = AppUpdateChecker.upgrade_app("0.2.0")
         assert result is True
 
     def test_upgrade_app_download_fails(self, tmp_path):
@@ -538,8 +542,9 @@ class TestAppUpdateChecker:
         assert result is False
 
     def test_upgrade_app_install_fails(self, tmp_path):
-        with patch("package_manager.download_file", return_value=True), \
+        with patch("package_manager.download_file", side_effect=lambda url, dest, **kw: [dest.parent.mkdir(parents=True, exist_ok=True), dest.write_bytes(b"binary"), True][-1]), \
              patch("package_manager.get_architecture", return_value="aarch64"), \
              patch("shutil.move", side_effect=Exception("permission denied")):
-            result = AppUpdateChecker.upgrade_app("0.2.0")
+            with patch("package_manager.Path", side_effect=lambda p: tmp_path / "termux-app-store-new" if str(p) == "/tmp/termux-app-store-new" else Path(p)):
+                result = AppUpdateChecker.upgrade_app("0.2.0")
         assert result is False
