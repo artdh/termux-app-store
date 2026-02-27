@@ -53,8 +53,27 @@ sys.modules["textual.containers"] = fake_containers
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-with patch("termux_app_store.termux_app_store.resolve_app_root", return_value=FAKE_ROOT):
+import importlib
+import os
+
+sys.modules.pop("termux_app_store.termux_app_store", None)
+
+_orig_environ = dict(os.environ)
+
+import tempfile, shutil
+_tmp_dir = tempfile.mkdtemp()
+_fake_root = Path(_tmp_dir)
+(_fake_root / "packages").mkdir()
+(_fake_root / "build-package.sh").write_text("# Termux App Store Official\n")
+os.environ["TERMUX_APP_STORE_HOME"] = str(_fake_root)
+
+try:
     import termux_app_store.termux_app_store as tui_module
+finally:
+    os.environ.clear()
+    os.environ.update(_orig_environ)
+
+FAKE_ROOT = tui_module.APP_ROOT
 
 from termux_app_store.termux_app_store import (
     strip_ansi,
@@ -258,7 +277,6 @@ class TestResolveAppRoot:
 class TestTermuxAppStoreUnit:
 
     def _make_app(self, tmp_path):
-        """Buat instance TermuxAppStore dengan minimal setup."""
         app = tui_module.TermuxAppStore.__new__(tui_module.TermuxAppStore)
         app.packages = []
         app.status_cache = {}
