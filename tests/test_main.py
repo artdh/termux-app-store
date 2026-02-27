@@ -13,10 +13,11 @@ _fake_root = Path(_tmp)
 (_fake_root / "build-package.sh").write_text("# Termux App Store Official\n")
 os.environ["TERMUX_APP_STORE_HOME"] = str(_fake_root)
 
-for key in list(sys.modules.keys()):
-    if "termux_app_store.main" in key:
-        del sys.modules[key]
+import termux_app_store as _pkg
+if not hasattr(_pkg, "run_tui"):
+    _pkg.run_tui = MagicMock()
 
+sys.modules.pop("termux_app_store.main", None)
 from termux_app_store import main as main_module
 
 del os.environ["TERMUX_APP_STORE_HOME"]
