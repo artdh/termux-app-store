@@ -82,8 +82,8 @@ def has_store_fingerprint(path: Path) -> bool:
                     break
                 if FINGERPRINT_STRING in line:
                     return True
-    except Exception: # pragma: no covee
-        pass # pragma: no covee
+    except Exception: # pragma: no cover
+        pass # pragma: no cover
     return False
 
 
