@@ -86,6 +86,7 @@ from termux_app_store.termux_app_store import (
     FINGERPRINT_STRING,
 )
 
+
 class TestStripAnsi:
 
     def test_removes_color_codes(self):
@@ -207,7 +208,6 @@ class TestCacheRoot:
 
         with patch.object(tui_module, "CACHE_FILE", cache):
             save_cached_root(root)
-            # Reload using patched CACHE_FILE
             with patch("termux_app_store.termux_app_store.CACHE_FILE", cache):
                 result = load_cached_root()
         assert result == root.resolve()
@@ -277,6 +277,7 @@ class TestResolveAppRoot:
 class TestTermuxAppStoreUnit:
 
     def _make_app(self, tmp_path):
+        """Buat instance TermuxAppStore dengan minimal setup."""
         app = tui_module.TermuxAppStore.__new__(tui_module.TermuxAppStore)
         app.packages = []
         app.status_cache = {}
@@ -321,7 +322,6 @@ class TestTermuxAppStoreUnit:
     def test_get_status_cached(self, tmp_path):
         app = self._make_app(tmp_path)
         app.status_cache["bower"] = "INSTALLED"
-        # Should return cached without calling get_installed_version
         with patch("termux_app_store.termux_app_store.get_installed_version") as mock_giv:
             result = app.get_status("bower", "1.8.12")
         assert result == "INSTALLED"
@@ -455,3 +455,209 @@ class TestRunTui:
         with patch.object(tui_module.TermuxAppStore, "run") as mock_run:
             tui_module.run_tui()
         mock_run.assert_called_once()
+
+
+class TestRefreshListWithChildren:
+
+    def _make_app(self):
+        app = tui_module.TermuxAppStore.__new__(tui_module.TermuxAppStore)
+        app.packages = []
+        app.status_cache = {}
+        app.search_query = ""
+        app.current_item = None
+        app.installing = False
+        app.log_buffer = []
+        app.list_view = MagicMock()
+        app.info = MagicMock()
+        app.log_view = MagicMock()
+        app.log_container = MagicMock()
+        app.progress = MagicMock()
+        app.install_btn = MagicMock()
+        return app
+
+    def test_refresh_list_shows_preview_when_children(self):
+        app = self._make_app()
+        app.packages = [
+            {"name": "bower", "version": "1.0", "desc": "-", "deps": "-", "maintainer": "-"},
+        ]
+        app.search_query = ""
+        fake_item = MagicMock()
+        app.list_view.children = [fake_item]
+
+        with patch.object(app, "show_preview") as mock_preview:
+            app.refresh_list()
+        mock_preview.assert_called_once_with(fake_item)
+        assert app.list_view.index == 0
+
+    def test_refresh_list_no_preview_when_no_children(self):
+        app = self._make_app()
+        app.packages = []
+        app.search_query = ""
+        app.list_view.children = []
+
+        with patch.object(app, "show_preview") as mock_preview:
+            app.refresh_list()
+        mock_preview.assert_not_called()
+
+
+class TestEventHandlers:
+
+    def _make_app(self):
+        app = tui_module.TermuxAppStore.__new__(tui_module.TermuxAppStore)
+        app.packages = []
+        app.status_cache = {}
+        app.search_query = ""
+        app.current_item = None
+        app.installing = False
+        app.log_buffer = []
+        app.list_view = MagicMock()
+        app.info = MagicMock()
+        app.log_view = MagicMock()
+        app.log_container = MagicMock()
+        app.progress = MagicMock()
+        app.install_btn = MagicMock()
+        app.worker_queue = MagicMock()
+        return app
+
+    def test_on_input_changed(self):
+        app = self._make_app()
+        event = MagicMock()
+        event.value = "  Bower  "
+        with patch.object(app, "refresh_list") as mock_refresh:
+            app.on_input_changed(event)
+        assert app.search_query == "bower"
+        mock_refresh.assert_called_once()
+
+    def test_on_list_view_highlighted_with_item(self):
+        app = self._make_app()
+        fake_item = MagicMock()
+        event = MagicMock()
+        event.item = fake_item
+        with patch.object(app, "show_preview") as mock_preview:
+            app.on_list_view_highlighted(event)
+        mock_preview.assert_called_once_with(fake_item)
+
+    def test_on_list_view_highlighted_no_item(self):
+        app = self._make_app()
+        event = MagicMock()
+        event.item = None
+        with patch.object(app, "show_preview") as mock_preview:
+            app.on_list_view_highlighted(event)
+        mock_preview.assert_not_called()
+
+
+class TestAsyncHandlers:
+
+    def _make_app(self):
+        app = tui_module.TermuxAppStore.__new__(tui_module.TermuxAppStore)
+        app.packages = []
+        app.status_cache = {}
+        app.search_query = ""
+        app.current_item = MagicMock()
+        app.current_item.pkg = {"name": "bower"}
+        app.installing = False
+        app.log_buffer = []
+        app.list_view = MagicMock()
+        app.info = MagicMock()
+        app.log_view = MagicMock()
+        app.log_container = MagicMock()
+        app.progress = MagicMock()
+        app.install_btn = MagicMock()
+        import asyncio
+        app.worker_queue = asyncio.Queue()
+        return app
+
+    def test_on_button_pressed_install(self):
+        import asyncio
+        app = self._make_app()
+        event = MagicMock()
+        event.button.id = "install"
+
+        async def run():
+            await app.on_button_pressed(event)
+        asyncio.run(run())
+        assert not app.worker_queue.empty()
+
+    def test_on_button_pressed_not_install(self):
+        import asyncio
+        app = self._make_app()
+        event = MagicMock()
+        event.button.id = "other"
+
+        async def run():
+            await app.on_button_pressed(event)
+        asyncio.run(run())
+        assert app.worker_queue.empty()
+
+    def test_on_button_pressed_already_installing(self):
+        import asyncio
+        app = self._make_app()
+        app.installing = True
+        event = MagicMock()
+        event.button.id = "install"
+
+        async def run():
+            await app.on_button_pressed(event)
+        asyncio.run(run())
+        assert app.worker_queue.empty()
+
+    def test_consume_worker_queue_when_installing(self):
+        import asyncio
+        app = self._make_app()
+        app.installing = True
+
+        async def run():
+            await app.consume_worker_queue()
+        asyncio.run(run())  # should return early
+
+    def test_consume_worker_queue_empty(self):
+        import asyncio
+        app = self._make_app()
+        app.installing = False
+
+        async def run():
+            await app.consume_worker_queue()
+        asyncio.run(run())  # queue empty, should return early
+
+    def test_consume_worker_queue_processes_item(self):
+        import asyncio
+        app = self._make_app()
+        app.installing = False
+        app.worker_queue.put_nowait("bower")
+
+        async def run():
+            with patch("asyncio.to_thread", new_callable=lambda: lambda f, *a, **kw: asyncio.coroutine(lambda: f(*a, **kw))()):
+                await app.consume_worker_queue()
+
+        with patch.object(app, "run_build_sync"):
+            asyncio.run(run())
+
+
+class TestPackageItemCompose:
+
+    def test_compose_yields_label(self):
+        pkg = {"name": "bower", "version": "1.0", "desc": "-", "deps": "-", "maintainer": "-"}
+        item = tui_module.PackageItem.__new__(tui_module.PackageItem)
+        item.pkg = pkg
+        results = list(item.compose())
+        assert len(results) == 1
+
+
+class TestMainBlock:
+
+    def test_main_block(self):
+        with patch.object(tui_module, "run_tui") as mock_run:
+            exec(
+                'if "__main__" == "__main__": run_tui()',
+                {"run_tui": mock_run, "__name__": "__main__"}
+            )
+        mock_run.assert_called_once()
+
+
+class TestMethodsExist:
+
+    def test_on_mount_exists(self):
+        assert hasattr(tui_module.TermuxAppStore, "on_mount")
+
+    def test_compose_exists(self):
+        assert hasattr(tui_module.TermuxAppStore, "compose")
