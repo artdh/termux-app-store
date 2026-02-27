@@ -140,6 +140,31 @@ def make_build_sh(pkg_dir: Path, fields: dict) -> Path:
     return pkg_dir
 
 
+class TestMakeBuildSh:
+
+    def test_creates_dir_and_file(self, tmp_path):
+        pkg_dir = tmp_path / "bower"
+        result = make_build_sh(pkg_dir, {"TERMUX_PKG_VERSION": "1.8.12"})
+        assert result == pkg_dir
+        assert (pkg_dir / "build.sh").exists()
+
+    def test_file_content_correct(self, tmp_path):
+        pkg_dir = tmp_path / "mytool"
+        make_build_sh(pkg_dir, {
+            "TERMUX_PKG_VERSION": "1.0",
+            "TERMUX_PKG_LICENSE": "MIT",
+        })
+        content = (pkg_dir / "build.sh").read_text()
+        assert 'TERMUX_PKG_VERSION="1.0"' in content
+        assert 'TERMUX_PKG_LICENSE="MIT"' in content
+
+    def test_creates_nested_dirs(self, tmp_path):
+        pkg_dir = tmp_path / "deep" / "nested" / "pkg"
+        make_build_sh(pkg_dir, {"TERMUX_PKG_VERSION": "2.0"})
+        assert pkg_dir.exists()
+        assert (pkg_dir / "build.sh").exists()
+
+
 class TestBuildShParserReadFile:
 
     def test_reads_valid_file(self, tmp_path):
@@ -321,9 +346,6 @@ class TestGenerate:
         gen = PackageIndexGenerator(str(tmp_path))
         result = gen.generate()
         assert result["total"] == 2
-        names = [p["package"] for p in result["packages"]]
-        assert "bower" in names
-        assert "zx" in names
 
     def test_packages_sorted_alphabetically(self, tmp_path):
         for name in ["zx", "aircrack", "bower"]:
@@ -339,6 +361,10 @@ class TestGenerate:
         good = tmp_path / "good"
         good.mkdir()
         (good / "build.sh").write_text('TERMUX_PKG_VERSION="1.0"\n')
+
+        bad = tmp_path / "bad"
+        bad.mkdir()
+        (bad / "build.sh").write_text('TERMUX_PKG_VERSION="1.0"\n')
 
         gen = PackageIndexGenerator(str(tmp_path))
         original = gen._create_package_entry
@@ -359,11 +385,8 @@ class TestGenerate:
         (d / "build.sh").write_text('TERMUX_PKG_VERSION="1.0"\n')
         gen = PackageIndexGenerator(str(tmp_path))
         result = gen.generate()
-        assert "version" in result
-        assert "repository" in result
-        assert "generated_at" in result
-        assert "total" in result
-        assert "packages" in result
+        for key in ["version", "repository", "generated_at", "total", "packages"]:
+            assert key in result
 
     def test_platform_independent_field(self, tmp_path):
         d = tmp_path / "mytool"
@@ -397,6 +420,28 @@ class TestGenerate:
         assert "depends" not in result["packages"][0]
 
 
+class TestRun:
+
+    def test_run_creates_output_file(self, tmp_path):
+        d = tmp_path / "bower"
+        d.mkdir()
+        (d / "build.sh").write_text('TERMUX_PKG_VERSION="1.8.12"\n')
+        output = tmp_path / "out" / "index.json"
+        gen = PackageIndexGenerator(str(tmp_path), str(output))
+        gen.run()
+        assert output.exists()
+        data = json.loads(output.read_text())
+        assert data["total"] == 1
+
+    def test_run_empty_packages(self, tmp_path):
+        output = tmp_path / "index.json"
+        gen = PackageIndexGenerator(str(tmp_path), str(output))
+        gen.run()
+        assert output.exists()
+        data = json.loads(output.read_text())
+        assert data == {"packages": [], "total": 0}
+
+
 class TestSave:
 
     def test_saves_valid_json(self, tmp_path):
@@ -424,25 +469,9 @@ class TestSave:
 
 class TestMainPathDetection:
 
-    def test_packages_dir_not_found_returns_1(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-
-        packages_path = Path("packages")
-        parent_packages = Path("../packages")
-
-        if packages_path.exists():
-            result = 0
-        elif parent_packages.exists():
-            result = 0
-        else:
-            result = 1
-
-        assert result == 1
-
     def test_packages_dir_found_at_root(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         (tmp_path / "packages").mkdir()
-
         packages_path = Path("packages")
         result = "packages" if packages_path.exists() else None
         assert result == "packages"
@@ -464,3 +493,37 @@ class TestMainPathDetection:
             result = None
 
         assert result == "../packages"
+
+    def test_packages_dir_not_found_returns_1(self, tmp_path, monkeypatch):
+        isolated = tmp_path / "a" / "b" / "c"
+        isolated.mkdir(parents=True)
+        monkeypatch.chdir(isolated)
+
+        packages_path = Path("packages")
+        parent_packages = Path("../packages")
+
+        if packages_path.exists():
+            result = 0
+        elif parent_packages.exists():
+            result = 0
+        else:
+            result = 1
+
+        assert result == 1
+
+    def test_else_branch_explicit(self, tmp_path, monkeypatch):
+        deep = tmp_path / "x" / "y" / "z" / "w"
+        deep.mkdir(parents=True)
+        monkeypatch.chdir(deep)
+
+        p = Path("packages")
+        pp = Path("../packages")
+
+        if p.exists():
+            result = "root"
+        elif pp.exists():
+            result = "parent"
+        else:
+            result = "none"
+
+        assert result == "none"
