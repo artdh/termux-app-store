@@ -175,10 +175,10 @@ class PackageIndexGenerator:
 
 
 def main():
-    if Path("packages").exists(): # pragma: no cover
+    if Path("packages").exists():
         packages_dir = "packages"
         output_file = "tools/index.json"
-    elif Path("../packages").exists():
+    elif Path("../packages").exists(): # pragma: no cover
         packages_dir = "../packages"
         output_file = "index.json"
     else: # pragma: no cover
