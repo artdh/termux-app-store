@@ -467,63 +467,50 @@ class TestSave:
         assert "Indonesia" in content
 
 
-class TestMainPathDetection:
+import importlib.util as _ilu
+import sys as _sys
 
-    def test_packages_dir_found_at_root(self, tmp_path, monkeypatch):
+def _import_build():
+    build_path = Path(__file__).parent.parent / "tools" / "build.py"
+    spec = _ilu.spec_from_file_location("build_module", str(build_path))
+    mod = _ilu.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class TestMainFunction:
+
+    def test_main_from_root_with_packages(self, tmp_path, monkeypatch):
+        (tmp_path / "packages").mkdir()
+        bower = tmp_path / "packages" / "bower"
+        bower.mkdir()
+        (bower / "build.sh").write_text('TERMUX_PKG_VERSION="1.8.12"\n')
+        (tmp_path / "tools").mkdir()
         monkeypatch.chdir(tmp_path)
+
+        build = _import_build()
+        result = build.main()
+        assert result == 0
+        assert (tmp_path / "tools" / "index.json").exists()
+
+    def test_main_from_tools_subdir(self, tmp_path, monkeypatch):
         (tmp_path / "packages").mkdir()
-        packages_path = Path("packages")
-        result = "packages" if packages_path.exists() else None
-        assert result == "packages"
+        bower = tmp_path / "packages" / "bower"
+        bower.mkdir()
+        (bower / "build.sh").write_text('TERMUX_PKG_VERSION="1.8.12"\n')
+        tools_dir = tmp_path / "tools"
+        tools_dir.mkdir()
+        monkeypatch.chdir(tools_dir)
 
-    def test_packages_dir_found_at_parent(self, tmp_path, monkeypatch):
-        subdir = tmp_path / "tools"
-        subdir.mkdir()
-        (tmp_path / "packages").mkdir()
-        monkeypatch.chdir(subdir)
+        build = _import_build()
+        result = build.main()
+        assert result == 0
 
-        packages_path = Path("packages")
-        parent_packages = Path("../packages")
-
-        if packages_path.exists():
-            result = "packages"
-        elif parent_packages.exists():
-            result = "../packages"
-        else:
-            result = None
-
-        assert result == "../packages"
-
-    def test_packages_dir_not_found_returns_1(self, tmp_path, monkeypatch):
+    def test_main_no_packages_dir_returns_1(self, tmp_path, monkeypatch):
         isolated = tmp_path / "a" / "b" / "c"
         isolated.mkdir(parents=True)
         monkeypatch.chdir(isolated)
 
-        packages_path = Path("packages")
-        parent_packages = Path("../packages")
-
-        if packages_path.exists():
-            result = 0
-        elif parent_packages.exists():
-            result = 0
-        else:
-            result = 1
-
+        build = _import_build()
+        result = build.main()
         assert result == 1
-
-    def test_else_branch_explicit(self, tmp_path, monkeypatch):
-        deep = tmp_path / "x" / "y" / "z" / "w"
-        deep.mkdir(parents=True)
-        monkeypatch.chdir(deep)
-
-        p = Path("packages")
-        pp = Path("../packages")
-
-        if p.exists():
-            result = "root"
-        elif pp.exists():
-            result = "parent"
-        else:
-            result = "none"
-
-        assert result == "none"
