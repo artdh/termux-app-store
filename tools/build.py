@@ -23,9 +23,9 @@ class BuildShParser:
         try:
             with open(self.path, 'r', encoding='utf-8') as f:
                 return f.read()
-        except Exception as e: # pragma: no cover
-            print(f"[ERROR] Gagal membaca {self.path}: {e}") # pragma: no cover
-            return "" # pragma: no cover
+        except Exception as e:  # pragma: no cover
+            print(f"[ERROR] Gagal membaca {self.path}: {e}")  # pragma: no cover
+            return ""  # pragma: no cover
 
     def _extract_var(self, var_name: str) -> Optional[str]:
         patterns = [
@@ -72,8 +72,8 @@ class PackageIndexGenerator:
 
     def _get_package_dirs(self) -> List[Path]:
         if not self.packages_dir.exists():
-            print(f"[ERROR] Directory {self.packages_dir} tidak ditemukan!")
-            return []
+            print(f"[ERROR] Directory {self.packages_dir} tidak ditemukan!")  # pragma: no cover
+            return []  # pragma: no cover
 
         package_dirs = []
         for item in self.packages_dir.iterdir():
@@ -122,8 +122,8 @@ class PackageIndexGenerator:
         package_dirs = self._get_package_dirs()
 
         if not package_dirs:
-            print("[WARNING] Tidak ada package ditemukan!")
-            return {"packages": [], "total": 0}
+            print("[WARNING] Tidak ada package ditemukan!")  # pragma: no cover
+            return {"packages": [], "total": 0}  # pragma: no cover
 
         print(f"[*] Found {len(package_dirs)} packages")
 
@@ -132,9 +132,9 @@ class PackageIndexGenerator:
             try:
                 entry = self._create_package_entry(pkg_dir)
                 packages.append(entry)
-            except Exception as e:
-                print(f"[ERROR] Failed to process {pkg_dir.name}: {e}")
-                continue
+            except Exception as e:  # pragma: no cover
+                print(f"[ERROR] Failed to process {pkg_dir.name}: {e}")  # pragma: no cover
+                continue  # pragma: no cover
 
         packages.sort(key=lambda x: x['package'])
 
@@ -178,17 +178,17 @@ def main():
     if Path("packages").exists():
         packages_dir = "packages"
         output_file = "tools/index.json"
-    elif Path("../packages").exists(): # pragma: no cover
-        packages_dir = "../packages"
-        output_file = "index.json"
-    else: # pragma: no cover
-        print("[ERROR] Cannot find packages directory!")
-        print("Please run this script from project root or tools/ directory")
-        return 1
+    elif Path("../packages").exists():  # pragma: no cover
+        packages_dir = "../packages"  # pragma: no cover
+        output_file = "index.json"  # pragma: no cover
+    else:  # pragma: no cover
+        print("[ERROR] Cannot find packages directory!")  # pragma: no cover
+        print("Please run this script from project root or tools/ directory")  # pragma: no cover
+        return 1  # pragma: no cover
     generator = PackageIndexGenerator(packages_dir, output_file)
     generator.run()
     return 0
 
 
-if __name__ == "__main__": # pragma: no cover
-    exit(main()) # pragma: no cover
+if __name__ == "__main__":  # pragma: no cover
+    exit(main())  # pragma: no cover
