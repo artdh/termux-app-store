@@ -625,8 +625,11 @@ class TestAsyncHandlers:
         app.installing = False
         app.worker_queue.put_nowait("bower")
 
+        async def fake_to_thread(f, *a, **kw):
+            return f(*a, **kw)
+
         async def run():
-            with patch("asyncio.to_thread", new_callable=lambda: lambda f, *a, **kw: asyncio.coroutine(lambda: f(*a, **kw))()):
+            with patch("asyncio.to_thread", side_effect=fake_to_thread):
                 await app.consume_worker_queue()
 
         with patch.object(app, "run_build_sync"):
