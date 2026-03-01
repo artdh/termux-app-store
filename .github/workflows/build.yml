@@ -1,5 +1,4 @@
 name: CI
-
 on:
   push:
     branches: [ master ]
@@ -11,28 +10,22 @@ on:
       - '.github/workflows/build.yml'
   pull_request:
     branches: [ master ]
-
 permissions:
   contents: read
-
 jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.14'
-
+          python-version: '3.12'
       - name: Install dependencies
         run: |
-          pip install pytest pytest-cov
-
+          pip install pytest pytest-cov textual
       - name: Run tests with coverage
         run: |
           pytest \
@@ -41,7 +34,6 @@ jobs:
             --cov-report=xml:coverage.xml \
             --cov-report=term-missing \
             -v
-
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
