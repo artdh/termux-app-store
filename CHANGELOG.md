@@ -8,6 +8,9 @@ and this project adheres to semantic versioning.
 
 ## [Unreleased]
 
+### Update
+- Package `tdoc` v1.0.5 → v1.0.6
+
 ---
 
 ## [v0.1.7] - 2026-03-02
