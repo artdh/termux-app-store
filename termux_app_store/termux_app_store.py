@@ -27,6 +27,15 @@ except ImportError:
     ComposeResult = None  # type: ignore
     _TEXTUAL_AVAILABLE = False
 
+    class _Stub:
+        class Pressed: pass
+        class Changed: pass
+        class Highlighted: pass
+
+    Header = Input = ListView = ListItem = Label = _Stub
+    Static = Button = ProgressBar = _Stub
+    Horizontal = Vertical = VerticalScroll = Center = _Stub
+
 CACHE_FILE = (
     Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
     / "termux-app-store"
@@ -220,7 +229,7 @@ class ConfirmUninstall(_ModalScreen):
                 yield Button("Cancel", id="btn-cancel")
                 yield Button("Uninstall", id="btn-confirm-uninstall")
 
-    def on_button_pressed(self, event: Button.Pressed) -> None: # pragma: no cover
+    def on_button_pressed(self, event) -> None: # pragma: no cover
         if event.button.id == "btn-cancel":
             self.dismiss(False)
         elif event.button.id == "btn-confirm-uninstall":
@@ -330,11 +339,11 @@ class TermuxAppStore(App):
             self.list_view.index = 0
             self.show_preview(self.list_view.children[0])
 
-    def on_input_changed(self, message: Input.Changed):
+    def on_input_changed(self, message):
         self.search_query = message.value.lower().strip()
         self.refresh_list()
 
-    def on_list_view_highlighted(self, event: ListView.Highlighted):
+    def on_list_view_highlighted(self, event):
         if event.item:
             self.show_preview(event.item)
 
@@ -392,7 +401,7 @@ class TermuxAppStore(App):
         is_installed = status in ("INSTALLED", "UPDATE")
         self.uninstall_btn.display = is_installed
 
-    async def on_button_pressed(self, event: Button.Pressed):
+    async def on_button_pressed(self, event):
         if self.installing:
             return
 
