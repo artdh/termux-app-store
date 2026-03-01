@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "repository": "https://github.com/djunekz/termux-app-store",
-  "generated_at": "2026-03-01T02:37:44.824909+00:00",
+  "generated_at": "2026-03-01T11:20:55.138851+00:00",
   "total": 29,
   "packages": [
     {
@@ -287,7 +287,7 @@
       "installed_size": "Unknown",
       "source": "https://github.com/djunekz/termux-app-store",
       "srcurl": "https://github.com/djunekz/tdoc/archive/refs/tags/v${TERMUX_PKG_VERSION}.tar.gz",
-      "sha256": "81ebc15bfefe7ab78f31fd919b2d2432ca83208b341ca77935daf3b051091990",
+      "sha256": "9460e410448fdac970a1bba4901fb7c69f04b48bdf500d3bb42d0fb67c194cec",
       "platform_independent": true,
       "depends": [
         "bash",
