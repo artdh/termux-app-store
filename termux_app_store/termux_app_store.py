@@ -6,6 +6,7 @@ import sys
 import os
 import json
 import re
+import urllib.request
 from pathlib import Path
 
 try:
@@ -48,9 +49,8 @@ INDEX_CACHE = (
     / "index.json"
 )
 
-GITHUB_REPO = "djunekz/termux-app-store"
-INDEX_URL   = f"https://raw.githubusercontent.com/{GITHUB_REPO}/master/tools/index.json"
-
+GITHUB_REPO        = "djunekz/termux-app-store"
+INDEX_URL          = f"https://raw.githubusercontent.com/{GITHUB_REPO}/master/tools/index.json"
 FINGERPRINT_STRING = "Termux App Store Official"
 
 ANSI_ESCAPE = re.compile(r'\x1b\[[0-9;]*[mGKHf]')
@@ -106,8 +106,8 @@ def has_store_fingerprint(path: Path) -> bool:
                     break
                 if FINGERPRINT_STRING in line:
                     return True
-    except Exception: # pragma: no cover
-        pass # pragma: no cover
+    except Exception:  # pragma: no cover
+        pass            # pragma: no cover
     return False
 
 def is_valid_root(path: Path) -> bool:
@@ -132,9 +132,7 @@ def load_cached_root():
 def save_cached_root(path: Path):
     try:
         CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        CACHE_FILE.write_text(
-            json.dumps({"app_root": str(path)}, indent=2)
-        )
+        CACHE_FILE.write_text(json.dumps({"app_root": str(path)}, indent=2))
     except Exception:
         pass
 
@@ -164,9 +162,51 @@ def resolve_app_root() -> Path:
         "export TERMUX_APP_STORE_HOME=/path/to/termux-app-store"
     )
 
-APP_ROOT = resolve_app_root()
+APP_ROOT     = resolve_app_root()
 PACKAGES_DIR = APP_ROOT / "packages"
-ROOT_DIR = APP_ROOT
+ROOT_DIR     = APP_ROOT
+
+
+def _fetch_index() -> list:
+    try:
+        req = urllib.request.Request(
+            INDEX_URL,
+            headers={"User-Agent": "termux-app-store-tui"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+            INDEX_CACHE.parent.mkdir(parents=True, exist_ok=True)
+            INDEX_CACHE.write_text(json.dumps(data, indent=2))
+            return data.get("packages", [])
+    except Exception:
+        pass
+
+    if INDEX_CACHE.exists():
+        try:
+            data = json.loads(INDEX_CACHE.read_text())
+            return data.get("packages", [])
+        except Exception:
+            pass
+
+    return []
+
+
+def ensure_package_files(name: str) -> bool:
+    build_sh = PACKAGES_DIR / name / "build.sh"
+    if build_sh.exists():
+        return True
+
+    url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/master/packages/{name}/build.sh"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "termux-app-store-tui"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            content = resp.read()
+        build_sh.parent.mkdir(parents=True, exist_ok=True)
+        build_sh.write_bytes(content)
+        return True
+    except Exception as e:
+        return False
+
 
 class PackageItem(ListItem):
     def __init__(self, pkg: dict):
@@ -227,7 +267,7 @@ class ConfirmUninstall(_ModalScreen):
         super().__init__()
         self.package_name = package_name
 
-    def compose(self) -> ComposeResult: # pragma: no cover
+    def compose(self) -> ComposeResult:  # pragma: no cover
         with Vertical(id="dialog"):
             yield Static("⚠  Confirm Uninstall", id="dialog-title")
             yield Static(
@@ -238,7 +278,7 @@ class ConfirmUninstall(_ModalScreen):
                 yield Button("Cancel", id="btn-cancel")
                 yield Button("Uninstall", id="btn-confirm-uninstall")
 
-    def on_button_pressed(self, event) -> None: # pragma: no cover
+    def on_button_pressed(self, event) -> None:  # pragma: no cover
         if event.button.id == "btn-cancel":
             self.dismiss(False)
         elif event.button.id == "btn-confirm-uninstall":
@@ -263,7 +303,7 @@ class TermuxAppStore(App):
     #uninstall:disabled { background: #44475a; color: #6272a4; }
     """
 
-    def on_mount(self): # pragma: no cover
+    def on_mount(self):  # pragma: no cover
         self.packages = []
         self.status_cache = {}
         self.search_query = ""
@@ -277,7 +317,7 @@ class TermuxAppStore(App):
         self.load_packages()
         self.refresh_list()
 
-    def compose(self) -> ComposeResult: # pragma: no cover
+    def compose(self) -> ComposeResult:  # pragma: no cover
         yield Header(show_clock=True)
         yield Input(placeholder="Search package...", id="search")
 
@@ -308,10 +348,9 @@ class TermuxAppStore(App):
         yield Static("Official Developer @djunekz | Termux App Store", id="footer")
 
     def load_packages(self):
-        """Load packages dari index.json remote, fallback ke lokal jika offline."""
         self.packages.clear()
 
-        entries = self._fetch_index()
+        entries = _fetch_index()
         if entries:
             for p in entries:
                 deps_raw = p.get("depends", [])
@@ -325,17 +364,16 @@ class TermuxAppStore(App):
                 })
             return
 
-        # Fallback: scan lokal jika index tidak bisa di-fetch
         for pkg_dir in sorted(PACKAGES_DIR.iterdir()):
             build = pkg_dir / "build.sh"
             if not build.exists():
                 continue
 
             data = {
-                "name": pkg_dir.name,
-                "desc": "-",
-                "version": "?",
-                "deps": "-",
+                "name":       pkg_dir.name,
+                "desc":       "-",
+                "version":    "?",
+                "deps":       "-",
                 "maintainer": "-",
             }
 
@@ -352,30 +390,6 @@ class TermuxAppStore(App):
 
             self.packages.append(data)
 
-    def _fetch_index(self) -> list:
-        """Fetch index.json dari GitHub, cache lokal untuk offline support."""
-        import urllib.request
-        try:
-            req = urllib.request.Request(
-                INDEX_URL,
-                headers={"User-Agent": "termux-app-store-tui"},
-            )
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read().decode())
-                INDEX_CACHE.parent.mkdir(parents=True, exist_ok=True)
-                INDEX_CACHE.write_text(json.dumps(data, indent=2))
-                return data.get("packages", [])
-        except Exception:
-            pass
-
-        if INDEX_CACHE.exists():
-            try:
-                data = json.loads(INDEX_CACHE.read_text())
-                return data.get("packages", [])
-            except Exception:
-                pass
-
-        return []
     def refresh_list(self):
         self.list_view.clear()
         q = self.search_query
@@ -459,7 +473,7 @@ class TermuxAppStore(App):
 
         elif event.button.id == "uninstall" and self.current_item:
             name = self.current_item.pkg["name"]
-            def handle_confirm(confirmed: bool) -> None: # pragma: no cover
+            def handle_confirm(confirmed: bool) -> None:  # pragma: no cover
                 if confirmed:
                     asyncio.get_event_loop().call_soon_threadsafe(
                         lambda: self.worker_queue.put_nowait(("uninstall", name))
@@ -482,6 +496,15 @@ class TermuxAppStore(App):
         self.log_buffer.clear()
         self.call_from_thread(lambda: setattr(self.progress, "progress", 0))
         self.call_from_thread(lambda: self.update_log(f"Installing {name}...\n"))
+
+        if not ensure_package_files(name):
+            self.call_from_thread(lambda: self.update_log(
+                f"\n✗ Failed to download build.sh for '{name}'. Check your internet connection."
+            ))
+            self.installing = False
+            self.call_from_thread(lambda: setattr(self.install_btn, "disabled", False))
+            self.call_from_thread(lambda: setattr(self.uninstall_btn, "disabled", False))
+            return
 
         proc = subprocess.Popen(
             ["bash", "build-package.sh", name],
@@ -567,8 +590,9 @@ class TermuxAppStore(App):
         self.log_view.update("\n".join(self.log_buffer))
         self.log_container.scroll_end(animate=False)
 
+
 def run_tui():
     TermuxAppStore().run()
 
-if __name__ == "__main__": # pragma: no cover
+if __name__ == "__main__":  # pragma: no cover
     run_tui()
