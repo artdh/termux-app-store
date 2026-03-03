@@ -42,6 +42,15 @@ CACHE_FILE = (
     / "path.json"
 )
 
+INDEX_CACHE = (
+    Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+    / "termux-app-store"
+    / "index.json"
+)
+
+GITHUB_REPO = "djunekz/termux-app-store"
+INDEX_URL   = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/tools/index.json"
+
 FINGERPRINT_STRING = "Termux App Store Official"
 
 ANSI_ESCAPE = re.compile(r'\x1b\[[0-9;]*[mGKHf]')
@@ -299,8 +308,24 @@ class TermuxAppStore(App):
         yield Static("Official Developer @djunekz | Termux App Store", id="footer")
 
     def load_packages(self):
+        """Load packages dari index.json remote, fallback ke lokal jika offline."""
         self.packages.clear()
 
+        entries = self._fetch_index()
+        if entries:
+            for p in entries:
+                deps_raw = p.get("depends", [])
+                deps = ", ".join(deps_raw) if deps_raw else "-"
+                self.packages.append({
+                    "name":       p.get("package", ""),
+                    "desc":       p.get("description", "-"),
+                    "version":    p.get("version", "?"),
+                    "deps":       deps,
+                    "maintainer": p.get("maintainer", "-"),
+                })
+            return
+
+        # Fallback: scan lokal jika index tidak bisa di-fetch
         for pkg_dir in sorted(PACKAGES_DIR.iterdir()):
             build = pkg_dir / "build.sh"
             if not build.exists():
@@ -327,6 +352,30 @@ class TermuxAppStore(App):
 
             self.packages.append(data)
 
+    def _fetch_index(self) -> list:
+        """Fetch index.json dari GitHub, cache lokal untuk offline support."""
+        import urllib.request
+        try:
+            req = urllib.request.Request(
+                INDEX_URL,
+                headers={"User-Agent": "termux-app-store-tui"},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode())
+                INDEX_CACHE.parent.mkdir(parents=True, exist_ok=True)
+                INDEX_CACHE.write_text(json.dumps(data, indent=2))
+                return data.get("packages", [])
+        except Exception:
+            pass
+
+        if INDEX_CACHE.exists():
+            try:
+                data = json.loads(INDEX_CACHE.read_text())
+                return data.get("packages", [])
+            except Exception:
+                pass
+
+        return []
     def refresh_list(self):
         self.list_view.clear()
         q = self.search_query

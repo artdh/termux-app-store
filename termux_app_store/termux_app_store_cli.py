@@ -31,9 +31,16 @@ CACHE_FILE = (
     / "path.json"
 )
 
+INDEX_CACHE = (
+    Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+    / "termux-app-store"
+    / "index.json"
+)
+
 FINGERPRINT_STRING = "Termux App Store Official"
 GITHUB_REPO        = "djunekz/termux-app-store"
 GITHUB_API_TAG     = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+INDEX_URL          = f"https://raw.githubusercontent.com/{GITHUB_REPO}/master/tools/index.json"
 
 R       = "\033[0m"
 B       = "\033[1m"
@@ -143,7 +150,50 @@ def resolve_app_root() -> Path:
     sys.exit(1)
 
 
-def load_package(pkg_dir: Path) -> dict:
+def fetch_index() -> list:
+    """Fetch index.json dari GitHub remote, fallback ke cache lokal jika offline."""
+    try:
+        req = urllib.request.Request(
+            INDEX_URL,
+            headers={"User-Agent": "termux-app-store-cli"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+            INDEX_CACHE.parent.mkdir(parents=True, exist_ok=True)
+            INDEX_CACHE.write_text(json.dumps(data, indent=2))
+            return data.get("packages", [])
+    except Exception:
+        pass
+
+    if INDEX_CACHE.exists():
+        try:
+            data = json.loads(INDEX_CACHE.read_text())
+            print(f"{YELLOW}[!] Offline mode: using cached index.{R}")
+            return data.get("packages", [])
+        except Exception:
+            pass
+
+    print(f"{RED}[!] Cannot fetch package index. Check your internet connection.{R}")
+    return []
+
+
+def _index_entry_to_pkg(p: dict) -> dict:
+    """Konversi entry index.json ke format internal yang dipakai CLI."""
+    deps_raw = p.get("depends", [])
+    deps = ", ".join(deps_raw) if deps_raw else "-"
+    return {
+        "name":       p.get("package", ""),
+        "desc":       p.get("description", "-"),
+        "version":    p.get("version", "?"),
+        "deps":       deps,
+        "maintainer": p.get("maintainer", "-"),
+        "homepage":   p.get("homepage", "-"),
+        "license":    p.get("license", "-"),
+    }
+
+
+def _load_package_local(pkg_dir: Path) -> dict:
+    """Fallback: baca langsung dari build.sh lokal."""
     data = {
         "name":       pkg_dir.name,
         "desc":       "-",
@@ -171,11 +221,26 @@ def load_package(pkg_dir: Path) -> dict:
     return data
 
 
+def load_package(pkg_dir: Path) -> dict:
+    """Load satu package dari index.json remote, fallback ke build.sh lokal."""
+    name = pkg_dir.name
+    entries = fetch_index()
+    for p in entries:
+        if p.get("package") == name:
+            return _index_entry_to_pkg(p)
+    return _load_package_local(pkg_dir)
+
+
 def load_all_packages(packages_dir: Path) -> list:
+    """Load semua packages dari index.json remote (bukan scan lokal)."""
+    entries = fetch_index()
+    if entries:
+        return [_index_entry_to_pkg(p) for p in entries]
+    # Fallback ke scan lokal jika index kosong
     pkgs = []
     for pkg_dir in sorted(packages_dir.iterdir()):
         if (pkg_dir / "build.sh").exists():
-            pkgs.append(load_package(pkg_dir))
+            pkgs.append(_load_package_local(pkg_dir))
     return pkgs
 
 
