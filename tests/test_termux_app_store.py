@@ -348,7 +348,8 @@ class TestTermuxAppStoreUnit:
         self._make_pkg(tmp_path, "bower", "1.8.12")
         self._make_pkg(tmp_path, "pnpm", "10.30.1")
         app = _make_app(tmp_path)
-        with patch.object(tui_module, "PACKAGES_DIR", tmp_path):
+        with patch.object(app, "_fetch_index", return_value=[]), \
+             patch.object(tui_module, "PACKAGES_DIR", tmp_path):
             app.load_packages()
         assert len(app.packages) == 2
         assert app.packages[0]["name"] == "bower"
@@ -357,9 +358,25 @@ class TestTermuxAppStoreUnit:
     def test_load_packages_skips_without_build_sh(self, tmp_path):
         (tmp_path / "nosh").mkdir()
         app = _make_app(tmp_path)
-        with patch.object(tui_module, "PACKAGES_DIR", tmp_path):
+        with patch.object(app, "_fetch_index", return_value=[]), \
+             patch.object(tui_module, "PACKAGES_DIR", tmp_path):
             app.load_packages()
         assert app.packages == []
+
+    def test_load_packages_from_index(self, tmp_path):
+        fake_entries = [
+            {"package": "bower",  "version": "1.8.12", "description": "A tool",
+             "maintainer": "@dev", "depends": ["nodejs"]},
+            {"package": "pnpm",   "version": "10.30.1", "description": "Fast pkg mgr",
+             "maintainer": "@dev", "depends": []},
+        ]
+        app = _make_app(tmp_path)
+        with patch.object(app, "_fetch_index", return_value=fake_entries):
+            app.load_packages()
+        assert len(app.packages) == 2
+        assert app.packages[0]["name"] == "bower"
+        assert app.packages[0]["deps"] == "nodejs"
+        assert app.packages[1]["deps"] == "-"
 
     def test_refresh_list_empty_search(self, tmp_path):
         app = _make_app(tmp_path)
