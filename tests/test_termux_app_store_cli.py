@@ -153,7 +153,8 @@ class TestLoadPackage:
             'TERMUX_PKG_HOMEPAGE="https://bower.io"\n'
             'TERMUX_PKG_LICENSE="MIT"\n'
         )
-        p = load_package(pkg)
+        with patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]):
+            p = load_package(pkg)
         assert p["name"] == "bower"
         assert p["version"] == "1.8.12"
         assert p["desc"] == "A package manager"
@@ -165,7 +166,8 @@ class TestLoadPackage:
     def test_defaults_when_no_build_sh(self, tmp_path):
         pkg = tmp_path / "empty"
         pkg.mkdir()
-        p = load_package(pkg)
+        with patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]):
+            p = load_package(pkg)
         assert p["version"] == "?"
         assert p["desc"] == "-"
 
@@ -173,23 +175,55 @@ class TestLoadPackage:
         pkg = tmp_path / "empty"
         pkg.mkdir()
         (pkg / "build.sh").write_text("")
-        p = load_package(pkg)
+        with patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]):
+            p = load_package(pkg)
         assert p["version"] == "?"
+
+    def test_load_from_index(self, tmp_path):
+        pkg = tmp_path / "bower"
+        pkg.mkdir()
+        fake_index = [{
+            "package": "bower",
+            "version": "1.8.12",
+            "description": "A package manager",
+            "maintainer": "@djunekz",
+            "homepage": "https://bower.io",
+            "license": "MIT",
+            "depends": ["nodejs"],
+        }]
+        with patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=fake_index):
+            p = load_package(pkg)
+        assert p["version"] == "1.8.12"
+        assert p["deps"] == "nodejs"
 
 
 class TestLoadAllPackages:
 
-    def test_loads_multiple(self, tmp_path):
+    def test_loads_from_index(self, tmp_path):
+        fake_index = [
+            {"package": "aaa", "version": "1.0", "description": "-",
+             "maintainer": "-", "homepage": "-", "license": "-", "depends": []},
+            {"package": "zzz", "version": "2.0", "description": "-",
+             "maintainer": "-", "homepage": "-", "license": "-", "depends": []},
+        ]
+        with patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=fake_index):
+            pkgs = load_all_packages(tmp_path)
+        assert len(pkgs) == 2
+        assert pkgs[0]["name"] == "aaa"
+
+    def test_fallback_to_local_when_index_empty(self, tmp_path):
         for name in ["aaa", "zzz", "mmm"]:
             (tmp_path / name).mkdir()
             (tmp_path / name / "build.sh").write_text(f'TERMUX_PKG_VERSION="1.0"\n')
-        pkgs = load_all_packages(tmp_path)
+        with patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]):
+            pkgs = load_all_packages(tmp_path)
         assert len(pkgs) == 3
         assert pkgs[0]["name"] == "aaa"
 
     def test_skips_without_build_sh(self, tmp_path):
         (tmp_path / "nosh").mkdir()
-        pkgs = load_all_packages(tmp_path)
+        with patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]):
+            pkgs = load_all_packages(tmp_path)
         assert pkgs == []
 
 
@@ -286,14 +320,16 @@ class TestCleanupPackageFiles:
 class TestCmdList:
 
     def test_empty(self, tmp_path, capsys):
-        cmd_list(tmp_path)
+        with patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]):
+            cmd_list(tmp_path)
         out = capsys.readouterr().out
         assert "No packages found" in out
 
     def test_with_packages(self, tmp_path, capsys):
         (tmp_path / "bower").mkdir()
         (tmp_path / "bower" / "build.sh").write_text('TERMUX_PKG_VERSION="1.8.12"\n')
-        with patch("termux_app_store.termux_app_store_cli.get_status", return_value=("INSTALLED", "up-to-date")):
+        with patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]), \
+             patch("termux_app_store.termux_app_store_cli.get_status", return_value=("INSTALLED", "up-to-date")):
             cmd_list(tmp_path)
         out = capsys.readouterr().out
         assert "bower" in out
@@ -308,7 +344,8 @@ class TestCmdShow:
     def test_found(self, tmp_path, capsys):
         (tmp_path / "bower").mkdir()
         (tmp_path / "bower" / "build.sh").write_text('TERMUX_PKG_VERSION="1.8.12"\n')
-        with patch("termux_app_store.termux_app_store_cli.get_status", return_value=("INSTALLED", "up-to-date")):
+        with patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]), \
+             patch("termux_app_store.termux_app_store_cli.get_status", return_value=("INSTALLED", "up-to-date")):
             cmd_show(tmp_path, "bower")
         out = capsys.readouterr().out
         assert "bower" in out
@@ -327,7 +364,8 @@ class TestCmdInstall:
 
     def test_already_installed(self, tmp_path, capsys):
         self._make_pkg(tmp_path, "bower", "1.8.12")
-        with patch("termux_app_store.termux_app_store_cli.get_status", return_value=("INSTALLED", "up-to-date")):
+        with patch("termux_app_store.termux_app_store_cli.get_status", return_value=("INSTALLED", "up-to-date")), \
+             patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]):
             result = cmd_install(tmp_path, tmp_path, "bower")
         assert result is True
 
@@ -342,6 +380,7 @@ class TestCmdInstall:
         mock_proc.stdout = self._make_stdout_mock([b"Installing...\n"])
         mock_proc.returncode = 0
         with patch("termux_app_store.termux_app_store_cli.get_status", return_value=("NOT INSTALLED", "")), \
+             patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]), \
              patch("subprocess.Popen", return_value=mock_proc), \
              patch("termux_app_store.termux_app_store_cli.hold_package"):
             result = cmd_install(tmp_path, tmp_path, "bower")
@@ -353,6 +392,7 @@ class TestCmdInstall:
         mock_proc.stdout = self._make_stdout_mock([])
         mock_proc.returncode = 1
         with patch("termux_app_store.termux_app_store_cli.get_status", return_value=("NOT INSTALLED", "")), \
+             patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]), \
              patch("subprocess.Popen", return_value=mock_proc):
             result = cmd_install(tmp_path, tmp_path, "bower")
         assert result is False
@@ -389,7 +429,8 @@ class TestCmdUpdate:
     def test_all_up_to_date(self, tmp_path, capsys):
         (tmp_path / "bower").mkdir()
         (tmp_path / "bower" / "build.sh").write_text('TERMUX_PKG_VERSION="1.8.12"\n')
-        with patch("termux_app_store.termux_app_store_cli.get_status", return_value=("INSTALLED", "")):
+        with patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]), \
+             patch("termux_app_store.termux_app_store_cli.get_status", return_value=("INSTALLED", "")):
             cmd_update(tmp_path)
         out = capsys.readouterr().out
         assert "up-to-date" in out
@@ -401,7 +442,8 @@ class TestCmdUpdate:
         def mock_status(name, version):
             return ("UPDATE", "update available")
 
-        with patch("termux_app_store.termux_app_store_cli.get_status", side_effect=mock_status), \
+        with patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]), \
+             patch("termux_app_store.termux_app_store_cli.get_status", side_effect=mock_status), \
              patch("termux_app_store.termux_app_store_cli.get_installed_version", return_value="1.8.11"):
             cmd_update(tmp_path)
         out = capsys.readouterr().out
@@ -410,7 +452,8 @@ class TestCmdUpdate:
     def test_skips_not_installed(self, tmp_path, capsys):
         (tmp_path / "bower").mkdir()
         (tmp_path / "bower" / "build.sh").write_text('TERMUX_PKG_VERSION="1.8.12"\n')
-        with patch("termux_app_store.termux_app_store_cli.get_status", return_value=("NOT INSTALLED", "")):
+        with patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]), \
+             patch("termux_app_store.termux_app_store_cli.get_status", return_value=("NOT INSTALLED", "")):
             cmd_update(tmp_path)
 
 
@@ -422,14 +465,16 @@ class TestCmdUpgrade:
 
     def test_nothing_to_upgrade(self, tmp_path, capsys):
         self._make_pkg(tmp_path, "bower")
-        with patch("termux_app_store.termux_app_store_cli.get_status", return_value=("INSTALLED", "")):
+        with patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]), \
+             patch("termux_app_store.termux_app_store_cli.get_status", return_value=("INSTALLED", "")):
             cmd_upgrade(tmp_path, tmp_path)
         out = capsys.readouterr().out
         assert "up-to-date" in out
 
     def test_upgrade_all(self, tmp_path, capsys):
         self._make_pkg(tmp_path, "bower", "1.8.12")
-        with patch("termux_app_store.termux_app_store_cli.get_status", return_value=("UPDATE", "")), \
+        with patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]), \
+             patch("termux_app_store.termux_app_store_cli.get_status", return_value=("UPDATE", "")), \
              patch("termux_app_store.termux_app_store_cli.get_installed_version", return_value="1.8.11"), \
              patch("termux_app_store.termux_app_store_cli.cmd_install", return_value=True):
             cmd_upgrade(tmp_path, tmp_path)
@@ -442,28 +487,32 @@ class TestCmdUpgrade:
 
     def test_upgrade_specific_not_installed(self, tmp_path, capsys):
         self._make_pkg(tmp_path, "bower")
-        with patch("termux_app_store.termux_app_store_cli.get_status", return_value=("NOT INSTALLED", "")):
+        with patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]), \
+             patch("termux_app_store.termux_app_store_cli.get_status", return_value=("NOT INSTALLED", "")):
             cmd_upgrade(tmp_path, tmp_path, target="bower")
         out = capsys.readouterr().out
         assert "not installed" in out.lower()
 
     def test_upgrade_specific_already_up_to_date(self, tmp_path, capsys):
         self._make_pkg(tmp_path, "bower")
-        with patch("termux_app_store.termux_app_store_cli.get_status", return_value=("INSTALLED", "")):
+        with patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]), \
+             patch("termux_app_store.termux_app_store_cli.get_status", return_value=("INSTALLED", "")):
             cmd_upgrade(tmp_path, tmp_path, target="bower")
         out = capsys.readouterr().out
         assert "up-to-date" in out
 
     def test_upgrade_specific_do_upgrade(self, tmp_path):
         self._make_pkg(tmp_path, "bower", "1.8.12")
-        with patch("termux_app_store.termux_app_store_cli.get_status", return_value=("UPDATE", "")), \
+        with patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]), \
+             patch("termux_app_store.termux_app_store_cli.get_status", return_value=("UPDATE", "")), \
              patch("termux_app_store.termux_app_store_cli.cmd_install", return_value=True) as mock_install:
             cmd_upgrade(tmp_path, tmp_path, target="bower")
         mock_install.assert_called_once()
 
     def test_upgrade_with_failure(self, tmp_path, capsys):
         self._make_pkg(tmp_path, "bower", "1.8.12")
-        with patch("termux_app_store.termux_app_store_cli.get_status", return_value=("UPDATE", "")), \
+        with patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]), \
+             patch("termux_app_store.termux_app_store_cli.get_status", return_value=("UPDATE", "")), \
              patch("termux_app_store.termux_app_store_cli.get_installed_version", return_value="1.8.11"), \
              patch("termux_app_store.termux_app_store_cli.cmd_install", return_value=False):
             cmd_upgrade(tmp_path, tmp_path)
@@ -532,7 +581,8 @@ class TestRunCli:
     def test_list(self, tmp_path, capsys):
         root = self._make_valid_root(tmp_path)
         with patch("sys.argv", ["termux-app-store", "list"]), \
-             patch("termux_app_store.termux_app_store_cli.resolve_app_root", return_value=root):
+             patch("termux_app_store.termux_app_store_cli.resolve_app_root", return_value=root), \
+             patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]):
             run_cli()
         assert "No packages found" in capsys.readouterr().out
 
@@ -560,19 +610,22 @@ class TestRunCli:
     def test_update(self, tmp_path, capsys):
         root = self._make_valid_root(tmp_path)
         with patch("sys.argv", ["termux-app-store", "update"]), \
-             patch("termux_app_store.termux_app_store_cli.resolve_app_root", return_value=root):
+             patch("termux_app_store.termux_app_store_cli.resolve_app_root", return_value=root), \
+             patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]):
             run_cli()
 
     def test_upgrade_no_target(self, tmp_path, capsys):
         root = self._make_valid_root(tmp_path)
         with patch("sys.argv", ["termux-app-store", "upgrade"]), \
-             patch("termux_app_store.termux_app_store_cli.resolve_app_root", return_value=root):
+             patch("termux_app_store.termux_app_store_cli.resolve_app_root", return_value=root), \
+             patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]):
             run_cli()
 
     def test_upgrade_with_target(self, tmp_path):
         root = self._make_valid_root(tmp_path)
         with patch("sys.argv", ["termux-app-store", "upgrade", "bower"]), \
-             patch("termux_app_store.termux_app_store_cli.resolve_app_root", return_value=root):
+             patch("termux_app_store.termux_app_store_cli.resolve_app_root", return_value=root), \
+             patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]):
             with pytest.raises(SystemExit):
                 run_cli()
 
@@ -690,14 +743,16 @@ class TestRunCliWithArgs:
     def test_show_with_arg(self, tmp_path):
         root = self._make_valid_root(tmp_path)
         with patch("sys.argv", ["termux-app-store", "show", "bower"]), \
-             patch("termux_app_store.termux_app_store_cli.resolve_app_root", return_value=root):
+             patch("termux_app_store.termux_app_store_cli.resolve_app_root", return_value=root), \
+             patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]):
             with pytest.raises(SystemExit):
                 run_cli()
 
     def test_install_with_arg(self, tmp_path):
         root = self._make_valid_root(tmp_path)
         with patch("sys.argv", ["termux-app-store", "install", "bower"]), \
-             patch("termux_app_store.termux_app_store_cli.resolve_app_root", return_value=root):
+             patch("termux_app_store.termux_app_store_cli.resolve_app_root", return_value=root), \
+             patch("termux_app_store.termux_app_store_cli.fetch_index", return_value=[]):
             with pytest.raises(SystemExit):
                 run_cli()
 
