@@ -39,6 +39,13 @@ def make_stdout_mock(lines):
 
 class TestMaliciousPackageMetadata:
 
+    @pytest.fixture(autouse=True)
+    def no_remote(self, monkeypatch):
+        monkeypatch.setattr(
+            "termux_app_store.termux_app_store_cli.fetch_index",
+            lambda: []
+        )
+
     def test_version_field_parsed_as_string(self, tmp_path):
         pkg = tmp_path / "evil"
         pkg.mkdir()
