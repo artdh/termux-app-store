@@ -14,8 +14,8 @@
 [![License](https://img.shields.io/badge/License-MIT-3fb950?style=flat&logo=opensourceinitiative&logoColor=white)](LICENSE)
 <br>
 <br>
-[![Stars](https://img.shields.io/github/stars/djunekz/termux-app-store?style=flat&logo=github&color=3fb950&label=stars&cacheSeconds=3600)](https://github.com/djunekz/termux-app-store/stargazers)
-[![Forks](https://img.shields.io/github/forks/djunekz/termux-app-store?style=flat&logo=github&color=3fb950&cacheSeconds=3600)](https://github.com/djunekz/termux-app-store/network)
+[![Stars](https://img.shields.io/github/stars/djunekz/termux-app-store?style=flat&logo=github&color=white&label=stars&cacheSeconds=3600)](https://github.com/djunekz/termux-app-store/stargazers)
+[![Forks](https://img.shields.io/github/forks/djunekz/termux-app-store?style=flat&logo=github&color=white&cacheSeconds=3600)](https://github.com/djunekz/termux-app-store/network)
 <br>
 <br>
 [![Issues](https://img.shields.io/badge/issues-open-3fb950?style=flat&logo=github&logoColor=white)](https://github.com/djunekz/termux-app-store/issues)
